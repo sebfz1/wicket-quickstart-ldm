@@ -5,6 +5,7 @@ import org.apache.wicket.markup.head.IHeaderResponse;
 import org.apache.wicket.markup.head.OnDomReadyHeaderItem;
 import org.apache.wicket.markup.html.WebPage;
 import org.apache.wicket.markup.html.basic.Label;
+import org.apache.wicket.model.ChainingModel;
 import org.apache.wicket.model.IModel;
 import org.apache.wicket.model.LoadableDetachableModel;
 import org.apache.wicket.request.cycle.RequestCycle;
@@ -21,19 +22,19 @@ public class QuickstartPage2 extends WebPage
 	private static final long serialVersionUID = 1L;
 	private static final Logger log = LoggerFactory.getLogger(QuickstartPage2.class);
 
-	private final IModel<Integer> outerModel;
+	private final IModel<Integer> model;
 	private final MyAjaxBehavior behavior;
 
 	public QuickstartPage2(PageParameters parameters)
 	{
 		super(parameters);
 
-		this.outerModel = newOuterModel();
+		this.model = newModel();
 
-		this.behavior = new MyAjaxBehavior(this.outerModel);
+		this.behavior = new MyAjaxBehavior(this.model);
 		this.add(this.behavior);
 
-		this.add(new Label("label", this.outerModel));
+		this.add(new Label("label", newChainingModel(this.model)));
 	}
 
 	@Override
@@ -44,16 +45,7 @@ public class QuickstartPage2 extends WebPage
 		response.render(new OnDomReadyHeaderItem(String.format("$.get('%s')", this.behavior.getCallbackUrl())));
 	}
 
-	@Override
-	public void detachModels()
-	{
-		super.detachModels();
-
-		log.info("#detachModels");
-		this.outerModel.detach();
-	}
-
-	static IModel<Integer> newOuterModel()
+	static IModel<Integer> newModel()
 	{
 		return new LoadableDetachableModel<Integer>() {
 
@@ -62,9 +54,31 @@ public class QuickstartPage2 extends WebPage
 			@Override
 			protected Integer load()
 			{
-				log.info("OuterModel#load");
+				log.info("LDM#load");
 
 				return 4;
+			}
+
+			@Override
+			protected void onDetach()
+			{
+				super.onDetach();
+
+				log.info("LDM#onDetach");
+			}
+		};
+	}
+
+	static IModel<?> newChainingModel(IModel<Integer> model)
+	{
+		return new ChainingModel<Integer>(model) {
+
+			private static final long serialVersionUID = 1L;
+
+			@Override
+			public void detach()
+			{
+				// cancel detach
 			}
 		};
 	}
@@ -83,11 +97,13 @@ public class QuickstartPage2 extends WebPage
 		@Override
 		public void onRequest()
 		{
-			log.info("#onRequest"); // yes, it's a new request!
+			log.info("Behavior#onRequest"); // yes, it's a new request!
 			String value = String.valueOf(this.model.getObject());
 
 			RequestCycle requestCycle = RequestCycle.get();
 			requestCycle.scheduleRequestHandlerAfterCurrent(new TextRequestHandler(value));
+
+			this.model.detach();
 		}
 
 		@Override
